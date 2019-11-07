@@ -9,12 +9,12 @@
 #include "lcd.h"
 #include "camera.h"
 #include <math.h>
-const int sobel_operator_x[3][3] = {{1,0,-1},
-				    {2,0,-2},
-			            {1,0,-1}};
-const int sobel_operator_y[3][3] = {{1,2,1},
+const int sobel_operator_x[3][3] = {{47,0,-47},
+				    {162,0,-162},
+			            {47,0,-47}};
+const int sobel_operator_y[3][3] = {{47,162,47},
 				    {0,0,0},
-				    {-1,-2,-1}};
+				    {-47,-162,-47}};
 uint8_t Sobel_operation_x(uint8_t top_left,uint8_t top,uint8_t top_right,uint8_t left,uint8_t mid,uint8_t right,uint8_t bottom_left,uint8_t bottom,uint8_t bottom_right){
 	uint8_t output = top_left * sobel_operator_x[0][0]+top * sobel_operator_x[0][1]+top_right * sobel_operator_x[0][2]+left * sobel_operator_x[1][0]+mid * sobel_operator_x[1][1]+right * sobel_operator_x[1][2]+bottom_left * sobel_operator_x[2][0]+bottom * sobel_operator_x[2][1]+bottom_right * sobel_operator_x[2][2];
 	return output;
@@ -32,58 +32,23 @@ int main(void)
   MX_DMA_Init();      //Initialize DMA
   tft_init(0, WHITE, BLACK, RED,BLUE);
   CAM_Init();
+  void ADC_Start(void);
   uint8_t grey_image[CAM_FrameHeight()][CAM_FrameWidth()];
   uint16_t rgb_image[CAM_FrameHeight()][CAM_FrameWidth()];
   uint8_t grey_image_sobel_x[CAM_FrameHeight()-2][CAM_FrameWidth()-2];
   uint8_t grey_image_sobel_y[CAM_FrameHeight()-2][CAM_FrameWidth()-2];
   uint8_t grey_image_sobel[CAM_FrameHeight()-2][CAM_FrameWidth()-2];
-  uint8_t median_image[CAM_FrameHeight()][CAM_FrameWidth()];
-
-  uint8_t find_median_in3x3(uint8_t matrix[3][3])
-  {
-	  uint8_t temp[9];
-	  uint8_t temp_num=0;
-	  for (uint8_t i=0; i<3; i++)
-	  {
-		  temp[i]=matrix[0][i];
-		  temp[i+3]=matrix[1][i];
-		  temp[i+6]=matrix[2][i];
-	  }
-	  for(uint8_t j=0; j<8; j++)
-	  {
-		  if(temp[j]>temp[j+1]){temp_num=temp[j];temp[j]=temp[j+1];temp[j+1]=temp_num;}
-	  }
-	  return temp[4];
-  }
-
-  uint8_t median_filter(uint8_t grey_image[][CAM_FrameWidth()-2])
-  {
-	  uint8_t temp[3][3];
-	  for (uint8_t y=0; y<CAM_FrameHeight();y++)
-	  {
-		  for(uint8_t x=0; x<CAM_FrameWidth();x++)
-		  {
-			   for(uint8_t i=0; i<3; i++)
-			   {
-				   for(uint8_t j=0; j<3; j++)
-				   {
-					   temp[i][j]=grey_image[y-1+i][x-1+j];
-				   }
-			   }
-			   median_image[y][x]=find_median_in3x3(temp);
-		  }
-	  }
-  }
-
+  extern volatile uint16_t ADC_Values[ADC_HISTORY_LEN][NUM_ADC_CHANNELS];
+  CAM_SetContrast(100);
   while(1) {
 	  if (CAM_FrameReady()==1){
 	  CAM_GetGrayscale(grey_image);
 	  }
-	  for(uint8_t y= 0;(y < CAM_FrameHeight()-2);y++){
-		  for(uint8_t x = 0; (x < CAM_FrameWidth() - 2); x++){
-			  grey_image_sobel_x[y][x] = Sobel_operation_x(grey_image[y][x],grey_image[y][x+1],grey_image[y][x+2],grey_image[y+1][x],grey_image[y+1][x+1],grey_image[y+1][x+2],grey_image[y+2][x],grey_image[y+2][x+1],grey_image[y+2][x+2]);
-			  grey_image_sobel_y[y][x] = Sobel_operation_y(grey_image[y][x],grey_image[y][x+1],grey_image[y][x+2],grey_image[y+1][x],grey_image[y+1][x+1],grey_image[y+1][x+2],grey_image[y+2][x],grey_image[y+2][x+1],grey_image[y+2][x+2]);
-			  grey_image_sobel[y][x] = sqrt(grey_image_sobel_x[y][x]*grey_image_sobel_x[y][x]+grey_image_sobel_y[y][x]*grey_image_sobel_y[y][x]);
+	  for(uint8_t y= 1;(y < CAM_FrameHeight() - 1);y++){
+		  for(uint8_t x = 1; (x < CAM_FrameWidth() - 1); x++){
+			  grey_image_sobel_x[y][x] = Sobel_operation_x(grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1],grey_image[y][x-1],grey_image[y][x],grey_image[y][x+1],grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1]);
+			  grey_image_sobel_y[y][x] = Sobel_operation_y(grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1],grey_image[y][x-1],grey_image[y][x],grey_image[y][x+1],grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1]);
+			  grey_image_sobel[y-1][x-1] = sqrt(grey_image_sobel_x[y-1][x-1]*grey_image_sobel_x[y-1][x-1]+grey_image_sobel_y[y-1][x-1]*grey_image_sobel_y[y-1][x-1]);
 			  if(grey_image_sobel[y][x]>123){
 				  grey_image_sobel[y][x] = 255;
 			  }
@@ -93,8 +58,8 @@ int main(void)
 		  }
 	  }
 	  CAM_GreyToRGB565(grey_image_sobel, rgb_image);
-	  median_filter(grey_image_sobel);
-	  tft_print_image(median_image, 0, 0, CAM_FrameWidth()-2, CAM_FrameHeight()-2);
+	  tft_print_image(rgb_image, 0, 0, CAM_FrameWidth()-2, CAM_FrameHeight()-2);
+	  tft_prints(0, 6, ADC_Values[ADC_HISTORY_LEN][NUM_ADC_CHANNELS]);
   }
 }
 
@@ -108,7 +73,7 @@ void SystemClock_Config(void)
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
-  /** Initializes the CPU, AHB and APB busses clocks
+  /** Initializes the CPU, AHB and APB busses clocks 
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
@@ -121,7 +86,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  /** Initializes the CPU, AHB and APB busses clocks
+  /** Initializes the CPU, AHB and APB busses clocks 
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
