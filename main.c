@@ -51,12 +51,12 @@ int main(void)
 	  }
 	  for(uint8_t j=0; j<8; j++)
 	  {
-		  if(temp[j]>temp[j+1]){temp_num=temp[j];temp[j]=temp[j+1];temp[j+1]=temp[j];}
+		  if(temp[j]>temp[j+1]){temp_num=temp[j];temp[j]=temp[j+1];temp[j+1]=temp_num;}
 	  }
 	  return temp[4];
   }
 
-  uint8_t median_filter(uint8 grey_image[CAM_FrameHeight()][CAM_FrameWidth()])
+  uint8_t median_filter(uint8_t grey_image[][CAM_FrameWidth()-2])
   {
 	  uint8_t temp[3][3];
 	  for (uint8_t y=0; y<CAM_FrameHeight();y++)
@@ -67,7 +67,7 @@ int main(void)
 			   {
 				   for(uint8_t j=0; j<3; j++)
 				   {
-					   temp[i][j]=grey_image[y-2+i][x-2+j];
+					   temp[i][j]=grey_image[y-1+i][x-1+j];
 				   }
 			   }
 			   median_image[y][x]=find_median_in3x3(temp);
@@ -93,7 +93,8 @@ int main(void)
 		  }
 	  }
 	  CAM_GreyToRGB565(grey_image_sobel, rgb_image);
-	  tft_print_image(rgb_image, 0, 0, CAM_FrameWidth()-2, CAM_FrameHeight()-2);
+	  median_filter(grey_image_sobel);
+	  tft_print_image(median_image, 0, 0, CAM_FrameWidth()-2, CAM_FrameHeight()-2);
   }
 }
 
