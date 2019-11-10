@@ -9,6 +9,7 @@
 #include "lcd.h"
 #include "camera.h"
 #include <math.h>
+
 //sobel values
 const int sobel_operator_x[3][3] = {{1,1,1},
 				    				{0,0,0},
@@ -28,17 +29,22 @@ uint8_t Sobel_operation_y(uint8_t top_left,uint8_t top,uint8_t top_right,uint8_t
 //centre_position is the centre of the image array
 uint8_t Left_Centre_distance(uint8_t centre_position,uint8_t image[][CAM_FrameWidth()-4]){
 	for(uint8_t distance = centre_position; distance> 0;distance--){
-		if(grey_image[0][distance]==0){
+		if(image[0][distance]==0){
 			return distance;
 		}
 	}
 }
 uint8_t Right_Centre_distance(uint8_t centre_position,uint8_t image[][CAM_FrameWidth()-4]){
 	for(uint8_t distance = centre_position; distance< CAM_FrameHeight();distance++){
-		if(grey_image[0][distance]==0){
+		if(image[0][distance]==0){
 			return distance;
 		}
 	}
+}
+uint16_t difference_of_magenetic_sensor_values(){
+//not sure about if it's ADC_Values[0][4] or not, might need to tell the hardware guys to check it
+	uint16_t difference = ADC_Values[0][2]-ADC_Values[0][4];
+	return difference;
 }
 void SystemClock_Config(void);
 uint8_t main(void)
@@ -51,10 +57,15 @@ uint8_t main(void)
   tft_init(0, WHITE, BLACK, RED,BLUE);
   CAM_Init();
   ADC_Start();
+//  HAL_TIM_ConfigTimer(&htim5, 287, 4999);
+//  HAL_TIM_PWM_Start(SERVO_TIM, TIM_CHANNEL_1);
   uint8_t Height = CAM_FrameHeight();
   uint8_t Width = CAM_FrameWidth();
   uint8_t left_distance;
   uint8_t right_distance;
+  uint16_t left_magnetic_sensor;
+  uint16_t right_magnetic_sensor;
+  uint8_t difference_of_magnetic_values;
 //defining variables for sobel_operator and median filter
   uint8_t grey_image[Height][Width];
   uint16_t rgb_image[Height][Width];
@@ -62,8 +73,6 @@ uint8_t main(void)
   uint8_t grey_image_sobel_y[Height-2][Width-2];
   uint8_t grey_image_sobel[Height-2][Width-2];
   uint8_t final_image[CAM_FrameHeight()-4][CAM_FrameWidth()-4];
-
-  uint16_t ADC_Values[1][4];
   uint8_t find_median_in3x3(uint8_t matrix[3][3])
   {
 	  uint8_t temp[9];
@@ -100,6 +109,8 @@ uint8_t main(void)
 
   while(1) {
 //To make sure the Camera is on when capturing the grey image
+	  left_magnetic_sensor = ADC_Values[0][2];
+	  right_magnetic_sensor = ADC_Values[0][3];
 	  if (CAM_FrameReady()==1){
 	  CAM_GetGrayscale(grey_image);
 	  }
@@ -119,21 +130,32 @@ uint8_t main(void)
 		  }
 	  }
 	  median_filter_remastered(grey_image_sobel);
-	  CAM_GreyToRGB565(median_image, rgb_image);
+	  CAM_GreyToRGB565(final_image, rgb_image);
 	  tft_print_image(rgb_image, 0, 0, CAM_FrameWidth()-4, CAM_FrameHeight()-4);
 	  if(tft_update(50)==0){
-		  tft_prints(0, 6, "%d",Height);
-		  tft_prints(0, 7, "%d",Width);
+		  tft_prints(0, 5, "%d",ADC_Values[0][0]);
+		  tft_prints(0, 6, "%d",ADC_Values[0][1]);
+		  tft_prints(0, 7, "%d",ADC_Values[0][2]);
+		  tft_prints(0, 8, "%d",ADC_Values[0][3]);
 	  }
 	  //FInished producing image, now getting the distance of border from centre to left and right
 	  left_distance=Left_Centre_distance(Width/2,final_image);
-	  Right_distance=Right_Centre_distance(Width/2,final_image);
+	  right_distance=Right_Centre_distance(Width/2,final_image);
 	  if(abs(right_distance - left_distance)>5){
 		  if(right_distance > left_distance){
 			  //what to do when the car should turn right
 		  }
 		  else{
 			  //what to do when the car should turn left
+		  }
+	  }
+	  difference_of_magnetic_values = difference_of_magenetic_sensor_values();
+	  if(difference_of_magnetic_values > 20){
+		  if(left_magnetic_sensor > right_magnetic_sensor){
+			  //what the car will do when it has to turn left
+		  }
+		  else{
+			  //what the car will do when it has to turn right
 		  }
 	  }
   }
