@@ -11,12 +11,18 @@
 #include <math.h>
 
 //sobel values
-const int sobel_operator_x[3][3] = {{1,1,1},
+const int sobel_operator_x[3][3] = {{47,0,-47},
+				    				{162,0,-162},
+									{47,0,-47}};
+const int sobel_operator_y[3][3] = {{47,162,47},
 				    				{0,0,0},
-									{-1,-1,-1}};
-const int sobel_operator_y[3][3] = {{1,0,-1},
-									{1,0,-1},
-									{1,0,-1}};
+									{-47,-162,-47}};
+//const int sobel_operator_x[3][3] = {{47,0,-47},
+//				    				{162,0,-162},
+//									{47,0,-47}};
+//const int sobel_operator_y[3][3] = {{47,162,47},
+//				    				{0,0,0},
+//									{-47,-162,-47}};
 //to multiply the image array by the sobel values with respect to x and y
 uint8_t Sobel_operation_x(uint8_t top_left,uint8_t top,uint8_t top_right,uint8_t left,uint8_t mid,uint8_t right,uint8_t bottom_left,uint8_t bottom,uint8_t bottom_right){
 	uint8_t output = top_left * sobel_operator_x[0][0]+top * sobel_operator_x[0][1]+top_right * sobel_operator_x[0][2]+left * sobel_operator_x[1][0]+mid * sobel_operator_x[1][1]+right * sobel_operator_x[1][2]+bottom_left * sobel_operator_x[2][0]+bottom * sobel_operator_x[2][1]+bottom_right * sobel_operator_x[2][2];
@@ -29,14 +35,15 @@ uint8_t Sobel_operation_y(uint8_t top_left,uint8_t top,uint8_t top_right,uint8_t
 //centre_position is the centre of the image array
 uint8_t Left_Centre_distance(uint8_t centre_position,uint8_t image[][CAM_FrameWidth()-4]){
 	for(uint8_t distance = centre_position; distance> 0;distance--){
-		if(image[0][distance]==0){
+//255 is white in grey scale
+		if(image[0][distance]==255){
 			return distance;
 		}
 	}
 }
 uint8_t Right_Centre_distance(uint8_t centre_position,uint8_t image[][CAM_FrameWidth()-4]){
 	for(uint8_t distance = centre_position; distance< CAM_FrameHeight();distance++){
-		if(image[0][distance]==0){
+		if(image[0][distance]==255){
 			return distance;
 		}
 	}
@@ -52,8 +59,14 @@ uint8_t main(void)
 //inits that I don't know what are the uses for
   HAL_Init();
   SystemClock_Config();
+  TIM1_PWM_Init();
+  TIM5_PWM_Init();
   MX_GPIO_Init();     //Initialize most GPIOs on board
-  MX_DMA_Init();      //Initialize DMA
+  MX_DMA_Init();
+  HAL_TIM_ConfigTimer(SERVO_TIM, 287, 4999);
+  HAL_TIM_ConfigTimer(MOTOR_TIM, 287, 4999);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
   tft_init(0, WHITE, BLACK, RED,BLUE);
   CAM_Init();
   ADC_Start();
@@ -66,6 +79,7 @@ uint8_t main(void)
   uint16_t left_magnetic_sensor;
   uint16_t right_magnetic_sensor;
   uint8_t difference_of_magnetic_values;
+  uint16_t servo_location;
 //defining variables for sobel_operator and median filter
   uint8_t grey_image[Height][Width];
   uint16_t rgb_image[Height][Width];
@@ -108,19 +122,20 @@ uint8_t main(void)
   }
 
   while(1) {
+//set the wheels facing to the centre
+	  servo_location = 375;
+	  HAL_TIM_PWM_SetCompare(SERVO_TIM, TIM_CHANNEL_1, servo_location);
 //To make sure the Camera is on when capturing the grey image
 	  left_magnetic_sensor = ADC_Values[0][2];
 	  right_magnetic_sensor = ADC_Values[0][3];
 	  if (CAM_FrameReady()==1){
 	  CAM_GetGrayscale(grey_image);
 	  }
-//Multiplying the grey image with sobel operator to get the edge of the image
 	  for(uint8_t y= 1;(y < CAM_FrameHeight() - 1);y++){
 		  for(uint8_t x = 1; (x < CAM_FrameWidth() - 1); x++){
 			  grey_image_sobel_x[y][x] = Sobel_operation_x(grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1],grey_image[y][x-1],grey_image[y][x],grey_image[y][x+1],grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1]);
 			  grey_image_sobel_y[y][x] = Sobel_operation_y(grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1],grey_image[y][x-1],grey_image[y][x],grey_image[y][x+1],grey_image[y-1][x-1],grey_image[y-1][x],grey_image[y-1][x+1]);
-			  grey_image_sobel[y-1][x-1] = sqrt(grey_image_sobel_x[y-1][x-1]*grey_image_sobel_x[y-1][x-1]+grey_image_sobel_y[y-1][x-1]*grey_image_sobel_y[y-1][x-1]);
-//Transforming the image into black and white only
+			  grey_image_sobel[y][x] = sqrt(grey_image_sobel_x[y][x]*grey_image_sobel_x[y][x]+grey_image_sobel_y[y][x]*grey_image_sobel_y[y][x]);
 			  if(grey_image_sobel[y][x]>123){
 				  grey_image_sobel[y][x] = 255;
 			  }
@@ -129,9 +144,8 @@ uint8_t main(void)
 			  }
 		  }
 	  }
-	  median_filter_remastered(grey_image_sobel);
-	  CAM_GreyToRGB565(final_image, rgb_image);
-	  tft_print_image(rgb_image, 0, 0, CAM_FrameWidth()-4, CAM_FrameHeight()-4);
+	  CAM_GreyToRGB565(grey_image_sobel, rgb_image);
+	  tft_print_image(rgb_image, 0, 0, CAM_FrameWidth()-2, CAM_FrameHeight()-2);
 	  if(tft_update(50)==0){
 		  tft_prints(0, 5, "%d",ADC_Values[0][0]);
 		  tft_prints(0, 6, "%d",ADC_Values[0][1]);
@@ -143,19 +157,19 @@ uint8_t main(void)
 	  right_distance=Right_Centre_distance(Width/2,final_image);
 	  if(abs(right_distance - left_distance)>5){
 		  if(right_distance > left_distance){
-			  //what to do when the car should turn right
+			  servo_location = 575;
 		  }
 		  else{
-			  //what to do when the car should turn left
+			  servo_location = 225;
 		  }
 	  }
 	  difference_of_magnetic_values = difference_of_magenetic_sensor_values();
 	  if(difference_of_magnetic_values > 20){
 		  if(left_magnetic_sensor > right_magnetic_sensor){
-			  //what the car will do when it has to turn left
+			  servo_location = 225;
 		  }
 		  else{
-			  //what the car will do when it has to turn right
+			  servo_location = 575;
 		  }
 	  }
   }
@@ -171,7 +185,7 @@ void SystemClock_Config(void)
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
-  /** Initializes the CPU, AHB and APB busses clocks 
+  /** Initializes the CPU, AHB and APB busses clocks
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
@@ -184,7 +198,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  /** Initializes the CPU, AHB and APB busses clocks 
+  /** Initializes the CPU, AHB and APB busses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
